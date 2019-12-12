@@ -17,6 +17,7 @@ ground_truth::ground_truth(std::string t){
     }
 }
 
+// 从加载的文件中读取真值,分析误差的时候用,0表示时间戳,1-3表示位置,4-7表示姿态四元数,8-10表示速度
 int ground_truth::get_pose(pose &pose_gt, int row){
     if(row < this->data.rows()){
         pose_gt.timestamp = this->data(row,0);
@@ -90,8 +91,11 @@ void imu::print(){
               << "Alignment (R): \n" << this->alignment.R << "\n\n";
 }
 
+// 根据imu给出的重力矢量测量值确定初始姿态矩阵
 void imu::initialize(ground_truth &gt, int samples){
 
+    // ground_truth的 11-13陀螺三轴随机常值偏移,14-16加速度计三轴随机常值偏移,取samples个样本求平均值
+    // imu的 4-6加速度计的测量值
     Eigen::Vector3d ab, gb;
     this->gyroscope.bias << gt.data.block(0,11,samples,1).mean(),
                             gt.data.block(0,12,samples,1).mean(),
@@ -105,7 +109,9 @@ void imu::initialize(ground_truth &gt, int samples){
           this->data.block(0,6,samples,1).mean();
     ab -= this->accelerometer.bias;
 
-    double x = atan2( ab(1), ab(2));
+    // imu的坐标系,前x左y上z,由重力矢量在imu系下的投影可以计算出roll和pitch,高度通道的yaw计算不出来
+    // atan2(y,x)   y/x
+    double x = atan2( ab(1), ab(2));       
     double y = atan2( -ab(0), sqrt(ab(1)*ab(1) + ab(2)*ab(2)));
     this->alignment.roll = x*180/PI;
     this->alignment.pitch = y*180/PI;
@@ -113,7 +119,7 @@ void imu::initialize(ground_truth &gt, int samples){
     // wRb - Rotates from the body to the world frame:
     this->alignment.R <<     cos(y), sin(x)*sin(y), cos(x)*sin(y),
                                   0,        cos(x),       -sin(x),
-                            -sin(y), sin(x)*cos(y), cos(x)*cos(y);
+                            -sin(y), sin(x)*cos(y), cos(x)*cos(y);    // 旋转顺序ZXY,写成矩阵的时候先左乘Z,再左乘X,再左乘Y
 }
 
 /* Camera */
@@ -127,6 +133,7 @@ void camera::print(){
 }
 
 /* Pose */
+// Pose赋初值
 int pose::initialize(ground_truth &gt, imu &s){
     // Timestamp
     this->timestamp = s.data(0,0);
@@ -137,16 +144,16 @@ int pose::initialize(ground_truth &gt, imu &s){
     this->orientation = s.alignment.R;
     return 1;
 }
-
+// 用imu给出的观测值来更新pose
 int pose::update(imu &s, int row){
-    // Get imu measurements
-    double t = s.data(row,0);
+    // Get imu measurements         0 1 2 3 4 5 6 时间戳 加速度 角速度
+    double t = s.data(row,0);    
     Eigen::Vector3d ab, wb;
-    ab << s.data(row,1), s.data(row,2), s.data(row,3);
-    wb << s.data(row,4), s.data(row,5), s.data(row,6);
+    ab << s.data(row,1), s.data(row,2), s.data(row,3);     // imu给出的三轴加速度
+    wb << s.data(row,4), s.data(row,5), s.data(row,6);     // imu给出的三轴角速度
 
     double rate = s.rate;
-    double dt = 1/rate;
+    double dt = 1/rate;      // 时间间隔
 
     // Timestamp update
     this->timestamp = t;
@@ -155,12 +162,12 @@ int pose::update(imu &s, int row){
     wb -= s.gyroscope.bias;
     Eigen::AngleAxisd dw (wb.norm()*dt, wb.normalized());
     Eigen::Matrix3d dR;
-    dR = dw;
+    dR = dw;     // 旋转向量和旋转矩阵是等价的
     this->orientation *= dR;
 
     // Velocity update
     ab -= s.accelerometer.bias;
-    Eigen::Vector3d dv = dt * ( this->orientation*ab + Eigen::Vector3d(0,0,-G) );
+    Eigen::Vector3d dv = dt * ( this->orientation*ab + Eigen::Vector3d(0,0,-G) );    // 测量得到的加速度要转换到导航系下
     this->velocity += dv;
 
     // Position update
@@ -195,7 +202,7 @@ void pose::print(){
 /*------------------------------ FUNCTIONS -----------------------------------*/
 
 /* Data I/O */
-int loadCSV(std::string &filename, Eigen::MatrixXd &data){
+int loadCSV(std::string &filename, Eigen::MatrixXd &data){     // 文件读写和处理可以参考一下
     // Load data in std vector of std vectors
     std::vector<std::vector<double> > data_matrix;
     std::string line;
@@ -211,7 +218,7 @@ int loadCSV(std::string &filename, Eigen::MatrixXd &data){
             }
             data_matrix.push_back(data_aux);
         }
-        data_matrix.erase(data_matrix.begin()); // Delete first line
+        data_matrix.erase(data_matrix.begin()); // Delete first line    为什么要删掉第一行???
 
         // Copy data into Eigen matrix
         int lines = data_matrix.size();
@@ -611,6 +618,7 @@ void compute_error(pose &p_error, pose &p, pose &p_gt){
     }
 }
 
+// 数据对齐
 void align_datasets(ground_truth &gt, imu &s){
     // std::cout << std::fixed;
     // std::cout << gt.data(0,0)-s.data(0,0)  << '\n';

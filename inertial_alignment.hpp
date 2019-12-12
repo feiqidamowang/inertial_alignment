@@ -17,7 +17,7 @@ class pose;
 
 //--- Classes definition
 typedef struct alignment_data{
-    double pitch;
+    double pitch;              // 静基座下可以确定pitch和roll,从而确定b系到R系的旋转矩阵
     double roll;
     Eigen::Matrix3d R;                  // wRb, Update to quaternions
 } alignment;
@@ -68,12 +68,12 @@ class imu{
     public:
         //--- 'imu' info
         int rate;
-        sensor_accelerometer accelerometer;
+        sensor_accelerometer accelerometer;     // 噪声密度 随机游走 随机常值偏移
         sensor_gyroscope gyroscope;
-        Eigen::Matrix4d extrinsics;
-        alignment_data alignment;
+        Eigen::Matrix4d extrinsics;             // imu的外参?是什么?
+        alignment_data alignment;               // imu所确定的姿态,roll pitch和姿态阵? 
         //--- 'imu' data
-        Eigen::MatrixXd data;
+        Eigen::MatrixXd data;                   // imu观测值,矩阵的每一行表示一帧数据吧
         //--- 'imu' methods
         void print();
         void initialize(ground_truth &gt, int samples);
@@ -82,20 +82,20 @@ class imu{
 class camera{
     public:
         int rate;
-        Eigen::Vector2d resolution;
-        Eigen::Vector4d distortion;
-        Eigen::Vector4d intrinsics;
-        Eigen::Matrix4d extrinsics;
+        Eigen::Vector2d resolution;      // 分辨率
+        Eigen::Vector4d distortion;      // 畸变
+        Eigen::Vector4d intrinsics;      // 标定产生的内参文件
+        Eigen::Matrix4d extrinsics;      // 标定产生的外参文件
         void print();
 };
 
 class pose{
     public:
         double timestamp;
-        Eigen::Vector3d position;
+        Eigen::Vector3d position;       // 状态量,位置速度姿态阵
         Eigen::Vector3d velocity;
         Eigen::Matrix3d orientation;    // wRb, Update to quaternions
-        int initialize(ground_truth &gt, imu &s);
+        int initialize(ground_truth &gt, imu &s);     // pose赋初值    gt给位置,初始速度为0,imu给时间戳和姿态阵
         int update(imu &s, int row);
         void print();
 };

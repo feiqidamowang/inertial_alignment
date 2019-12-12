@@ -33,10 +33,10 @@ int main (int argc, char *argv[])
        loadYAML<ground_truth>(filename_specs_mle, gt) &&
        loadYAML<imu>(filename_specs_imu, my_imu))
    {
-        align_datasets(gt, my_imu);
+        align_datasets(gt, my_imu);   // 通过比较时间戳进行数据对齐
 
-        my_imu.initialize(gt, 10);
-        my_pose.initialize(gt, my_imu);
+        my_imu.initialize(gt, 10);       // 根据imu的加速度计测量值计算初始的pitch和roll,以及对应的姿态阵
+        my_pose.initialize(gt, my_imu);  // 时间,位置,速度,姿态旋转矩阵赋初值
 
         /*-------------------- Inertial navigation debug ---------------------*/
         for(int i=0; i<5; i++){
